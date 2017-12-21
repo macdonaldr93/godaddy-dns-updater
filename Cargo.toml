@@ -1,5 +1,5 @@
 [package]
-name = "godaddy-dns"
+name = "godaddy-dns-updater"
 version = "0.1.0"
 authors = ["Ryan Macdonald <macdonaldr93@gmail.com>"]
 
