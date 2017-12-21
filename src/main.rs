@@ -17,7 +17,64 @@ use hyper_tls::HttpsConnector;
 use tokio_core::reactor::Core;
 use serde_json::Value;
 
+struct CliArgs {
+    api_key: String,
+    api_key_secret: String,
+    domain: String,
+    record_name: String,
+    record_type: String,
+    record_ttl: u64,
+}
+
 fn main() {
+    let args = init_cli();
+
+    // HTTP client
+    let current_ip = fetch_current_ip();
+    println!("Current IP address is {}", current_ip);
+
+    // Post to GoDaddy
+    let mut core = Core::new().unwrap();
+    let handle = core.handle();
+    let client = Client::configure()
+        .connector(HttpsConnector::new(4, &handle).unwrap())
+        .build(&handle);
+    let json = json!({
+            "type": args.record_type,
+            "data": current_ip,
+            "name": args.record_name,
+            "ttl": args.record_ttl,
+        }).to_string();
+    let url = format!("https://api.godaddy.com/v1/domains/{}/records/{}/{}", args.domain, args.record_type, args.record_name);
+    let uri = url.parse().unwrap();
+
+    println!("Updating {} with {}", url, json);
+
+    let mut req = Request::new(Method::Put, uri);
+    req.headers_mut().set(Authorization(format!("sso-key {}:{}", args.api_key, args.api_key_secret)));
+    req.headers_mut().set(ContentType::json());
+    req.headers_mut().set(ContentLength(json.len() as u64));
+    req.set_body(json);
+
+    let post = client.request(req).and_then(|res| {
+        println!("GoDaddy API Status: {}", res.status());
+
+        res.body().concat2()
+            .and_then(move |body| {
+                let v: Value = serde_json::from_slice(&body).map_err(|e| {
+                    io::Error::new(io::ErrorKind::Other, e)
+                })?;
+
+                println!("GoDaddy API Response: {}", v);
+
+                Ok(())
+            })
+    });
+
+    core.run(post).unwrap();
+}
+
+fn init_cli() -> CliArgs {
     let matches = App::new("GoDaddy DNS Updater")
         .version(crate_version!())
         .author(crate_authors!())
@@ -60,91 +117,36 @@ fn main() {
                 .help("sets the time to live of the record in seconds")
                 .default_value("600")
                 .takes_value(true)
+                .short("l")
                 .long("ttl"),
         ])
         .get_matches();
 
     // Get CLI information for request
-    let api_key = matches.value_of("api_key").unwrap();
-    println!("[CLI] API key: {}", api_key);
+    let cli_args = CliArgs {
+        api_key: matches.value_of("api_key").unwrap().to_owned(),
+        api_key_secret: matches.value_of("api_key_secret").unwrap().to_owned(),
+        domain: matches.value_of("domain").unwrap().to_owned(),
+        record_name: matches.value_of("record_name").unwrap().to_owned(),
+        record_type: matches.value_of("record_type").unwrap().to_owned(),
+        record_ttl: value_t!(matches, "record_ttl", u64).unwrap().to_owned()
+    };
 
-    let api_key_secret = matches.value_of("api_key_secret").unwrap();
-    println!("[CLI] API key secret: {}", api_key_secret);
-
-    let domain = matches.value_of("domain").unwrap();
-    println!("[CLI] Domain: {}", domain);
-
-    let record_name = matches.value_of("record_name").unwrap();
-    println!("[CLI] Record name: {}", record_name);
-
-    let record_type = matches.value_of("record_type").unwrap();
-    println!("[CLI] Record type: {}", record_type);
-
-    let record_ttl = value_t!(matches, "record_ttl", u32).unwrap();
-    println!("[CLI] Record TTL: {}", record_ttl);
-
-    // HTTP client
-    let current_ip = get_current_ip();
-    println!("[HTTP] Current IP address is {}", current_ip);
-
-    // Post to GoDaddy
-    let mut core = Core::new().unwrap();
-    let handle = core.handle();
-    let client = Client::configure()
-        .connector(HttpsConnector::new(4, &handle).unwrap())
-        .build(&handle);
-    let json = json!({
-            "type": record_type,
-            "data": current_ip,
-            "name": record_name,
-            "ttl": record_ttl,
-        }).to_string();
-    println!("[HTTP] Updating record {}", json);
-
-    let url = format!("https://api.godaddy.com/v1/domains/{}/records/{}/{}", domain, record_type, record_name);
-    println!("[HTTP] Posting to {}", url);
-
-    let uri = url.parse().unwrap();
-    let mut req = Request::new(Method::Put, uri);
-    req.headers_mut().set(Authorization(format!("sso-key {}:{}", api_key, api_key_secret)));
-    req.headers_mut().set(ContentType::json());
-    req.headers_mut().set(ContentLength(json.len() as u64));
-    req.set_body(json);
-
-    let post = client.request(req).and_then(|res| {
-        println!("[HTTP] Status: {}", res.status());
-
-        res.body().concat2()
-            .and_then(move |body| {
-                let v: Value = serde_json::from_slice(&body).map_err(|e| {
-                    io::Error::new(io::ErrorKind::Other, e)
-                })?;
-
-                println!("[HTTP] Response: {}", v);
-
-                Ok(())
-            })
-    });
-
-    core.run(post).unwrap();
+    cli_args
 }
 
-fn get_current_ip() -> String {
+fn fetch_current_ip() -> String {
     let mut core = Core::new().unwrap();
     let client = Client::new(&core.handle());
 
     let uri = "http://httpbin.org/ip".parse().unwrap();
     let work = client.get(uri)
         .and_then(|res| {
-            println!("[HTTP] Status: {}", res.status());
-
             let ip = res.body().concat2()
                 .and_then(move |body| {
                     let v: Value = serde_json::from_slice(&body).map_err(|e| {
                         io::Error::new(io::ErrorKind::Other, e)
                     })?;
-
-                    println!("[HTTP] Response: {}", v);
 
                     Ok(v["origin"].as_str().unwrap().to_owned())
                 });
