@@ -7,7 +7,7 @@ extern crate tokio_core;
 #[macro_use]
 extern crate serde_json;
 
-use std::io::{self, Write};
+use std::io::{self};
 use clap::{App, Arg};
 use futures::{Future, Stream};
 use hyper::Client;
@@ -80,7 +80,7 @@ fn main() {
     let record_type = matches.value_of("record_type").unwrap();
     println!("[CLI] Record type: {}", record_type);
 
-    let record_ttl = matches.value_of("record_ttl").unwrap();
+    let record_ttl = value_t!(matches, "record_ttl", u32).unwrap();
     println!("[CLI] Record TTL: {}", record_ttl);
 
     // HTTP client
@@ -112,14 +112,18 @@ fn main() {
     req.set_body(json);
 
     let post = client.request(req).and_then(|res| {
-        println!("POST: {}", res.status());
+        println!("[HTTP] Status: {}", res.status());
 
-        res.body().for_each(|chunk| {
-            io::stdout()
-                .write_all(&chunk)
-                .map(|_| ())
-                .map_err(From::from)
-        })
+        res.body().concat2()
+            .and_then(move |body| {
+                let v: Value = serde_json::from_slice(&body).map_err(|e| {
+                    io::Error::new(io::ErrorKind::Other, e)
+                })?;
+
+                println!("[HTTP] Response: {}", v);
+
+                Ok(())
+            })
     });
 
     core.run(post).unwrap();
@@ -132,13 +136,15 @@ fn get_current_ip() -> String {
     let uri = "http://httpbin.org/ip".parse().unwrap();
     let work = client.get(uri)
         .and_then(|res| {
-            println!("[HTTP] Response: {}", res.status());
+            println!("[HTTP] Status: {}", res.status());
 
             let ip = res.body().concat2()
                 .and_then(move |body| {
                     let v: Value = serde_json::from_slice(&body).map_err(|e| {
                         io::Error::new(io::ErrorKind::Other, e)
                     })?;
+
+                    println!("[HTTP] Response: {}", v);
 
                     Ok(v["origin"].as_str().unwrap().to_owned())
                 });
