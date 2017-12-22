@@ -7,6 +7,7 @@ extern crate serde;
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
+use std::io::{self, Write};
 use clap::{App, Arg, SubCommand};
 use std::path::Path;
 
@@ -15,16 +16,21 @@ mod ip;
 mod gd_api;
 
 fn main() {
-    let matches = cli();
+    let app = cli();
+
+    // Get help text for later
+    let mut help_buffer = Vec::new();
+    app.write_help(&mut help_buffer).unwrap();
+
+    let matches = app.get_matches();
     let cache = cache::Cache { path: Path::new("./godaddy-dns-updater.json") };
 
     match matches.subcommand() {
-        ("cache:clear", Some(_)) =>{
+        ("cache:clear", Some(_)) => {
             cache.clear();
             println!("Cache cleared");
-            return;
         },
-        ("update", Some(update_matches)) =>{
+        ("update", Some(update_matches)) => {
             // HTTP client
             let current_ip = ip::current_ip();
             println!("Current IP address is {}", current_ip);
@@ -56,12 +62,16 @@ fn main() {
             };
             gd_api::update_record(&credentials, &record);
         },
-        ("", None)   => println!("No subcommand was used"),
+        ("", None)   => {
+            let stdout = io::stdout();
+            let mut handle = stdout.lock();
+            handle.write_all(&help_buffer).unwrap();
+        },
         _            => unreachable!(),
     }
 }
 
-fn cli() -> clap::ArgMatches<'static> {
+fn cli() -> clap::App<'static, 'static> {
     App::new("GoDaddy DNS Updater")
         .version(crate_version!())
         .author(crate_authors!())
@@ -114,5 +124,4 @@ fn cli() -> clap::ArgMatches<'static> {
         .subcommand(SubCommand::with_name("cache:clear")
             .about("Clears current IP address cache")
         )
-        .get_matches()
 }
