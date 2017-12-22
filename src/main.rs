@@ -31,19 +31,22 @@ fn main() {
             println!("Cache cleared");
         },
         ("update", Some(update_matches)) => {
+            let ip_address = match update_matches.value_of("ip_address") {
+                Some(ip) => ip.to_owned(),
+                _ => ip::current_ip()
+            };
             // HTTP client
-            let current_ip = ip::current_ip();
-            println!("Current IP address is {}", current_ip);
+            println!("Current IP address is {}", ip_address);
 
             // Check cache
             let mut cache_content = cache.read();
             println!("Current cached IP address is {}", cache_content.last_ip);
-            if current_ip == cache_content.last_ip {
+            if ip_address == cache_content.last_ip {
                 println!("IP address is the same. Exiting...");
                 return;
             }
             cache_content = cache::CacheContent {
-                last_ip: current_ip.to_owned(),
+                last_ip: ip_address.to_owned(),
             };
             println!("Cached IP address updated to {}", cache_content.last_ip);
             cache.write(&cache_content);
@@ -55,7 +58,7 @@ fn main() {
             };
             let record = gd_api::Record {
                 kind: update_matches.value_of("record_type").unwrap().to_owned(),
-                ip: current_ip.to_owned(),
+                ip: ip_address.to_owned(),
                 domain: update_matches.value_of("domain").unwrap().to_owned(),
                 name: update_matches.value_of("record_name").unwrap().to_owned(),
                 ttl: value_t!(update_matches, "record_ttl", u64).unwrap().to_owned(),
@@ -80,13 +83,19 @@ fn cli() -> clap::App<'static, 'static> {
             .about("Updates GoDaddy DNS records with current IP address")
             .aliases(&["u"])
             .args(&[
+                Arg::with_name("ip_address")
+                    .value_name("IP")
+                    .help("sets the IP address to update DNS records")
+                    .takes_value(true)
+                    .short("ip")
+                    .long("ip_address"),
                 Arg::with_name("api_key")
                     .value_name("KEY")
                     .help("sets the API key for your GoDaddy account")
                     .required(true)
                     .takes_value(true)
                     .short("a")
-                    .long("apiKey"),
+                    .long("api_key"),
                 Arg::with_name("api_key_secret")
                     .value_name("SECRET")
                     .help("sets the API key secret for your GoDaddy account")
