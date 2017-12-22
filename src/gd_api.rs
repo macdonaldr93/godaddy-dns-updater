@@ -20,7 +20,7 @@ pub struct Record {
     pub ttl: u64,
 }
 
-pub fn update_record(creds: Credentials, record: Record) {
+pub fn update_record(creds: &Credentials, record: &Record) {
     let mut core = Core::new().unwrap();
     let handle = core.handle();
     let client = Client::configure()

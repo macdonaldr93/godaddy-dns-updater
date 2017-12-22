@@ -8,54 +8,56 @@ extern crate serde;
 #[macro_use] extern crate serde_derive;
 
 use clap::{App, Arg, SubCommand};
+use std::path::Path;
 
 mod cache;
 mod ip;
 mod gd_api;
 
 fn main() {
-    let cli = cli();
-    let cache = cache::Cache { path: String::from("./godaddy-dns-updater.json") };
+    let matches = cli();
+    let cache = cache::Cache { path: Path::new("./godaddy-dns-updater.json") };
 
-    if cli.is_present("cache:clear") {
-        cache.clear();
-        println!("Cache cleared");
-        return;
-    }
-
-    if cli.is_present("update") {
-        let cli_update = cli.subcommand_matches("update").unwrap();
-
-        // HTTP client
-        let current_ip = ip::current_ip();
-        println!("Current IP address is {}", current_ip);
-
-        // Check cache
-        let mut cache_content = cache.read();
-        println!("Current cached IP address is {}", cache_content.last_ip);
-        if current_ip == cache_content.last_ip {
-            println!("IP address is the same. Exiting...");
+    match matches.subcommand() {
+        ("cache:clear", Some(_)) =>{
+            cache.clear();
+            println!("Cache cleared");
             return;
-        }
-        cache_content = cache::CacheContent {
-            last_ip: current_ip.to_owned(),
-        };
-        println!("Cached IP address updated to {}", cache_content.last_ip);
-        cache.write(cache_content);
+        },
+        ("update", Some(update_matches)) =>{
+            // HTTP client
+            let current_ip = ip::current_ip();
+            println!("Current IP address is {}", current_ip);
 
-        // Post to GoDaddy
-        let credentials = gd_api::Credentials {
-            api_key: cli_update.value_of("api_key").unwrap().to_owned(),
-            secret: cli_update.value_of("api_key_secret").unwrap().to_owned(),
-        };
-        let record = gd_api::Record {
-            kind: cli_update.value_of("record_type").unwrap().to_owned(),
-            ip: current_ip.to_owned(),
-            domain: cli_update.value_of("domain").unwrap().to_owned(),
-            name: cli_update.value_of("record_name").unwrap().to_owned(),
-            ttl: value_t!(cli_update, "record_ttl", u64).unwrap().to_owned(),
-        };
-        gd_api::update_record(credentials, record);
+            // Check cache
+            let mut cache_content = cache.read();
+            println!("Current cached IP address is {}", cache_content.last_ip);
+            if current_ip == cache_content.last_ip {
+                println!("IP address is the same. Exiting...");
+                return;
+            }
+            cache_content = cache::CacheContent {
+                last_ip: current_ip.to_owned(),
+            };
+            println!("Cached IP address updated to {}", cache_content.last_ip);
+            cache.write(&cache_content);
+
+            // Post to GoDaddy
+            let credentials = gd_api::Credentials {
+                api_key: update_matches.value_of("api_key").unwrap().to_owned(),
+                secret: update_matches.value_of("api_key_secret").unwrap().to_owned(),
+            };
+            let record = gd_api::Record {
+                kind: update_matches.value_of("record_type").unwrap().to_owned(),
+                ip: current_ip.to_owned(),
+                domain: update_matches.value_of("domain").unwrap().to_owned(),
+                name: update_matches.value_of("record_name").unwrap().to_owned(),
+                ttl: value_t!(update_matches, "record_ttl", u64).unwrap().to_owned(),
+            };
+            gd_api::update_record(&credentials, &record);
+        },
+        ("", None)   => println!("No subcommand was used"),
+        _            => unreachable!(),
     }
 }
 
