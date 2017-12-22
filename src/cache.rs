@@ -3,8 +3,9 @@ use std::fs;
 use std::path::Path;
 use serde_json;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CacheContent {
+    pub hash: u64,
     pub last_ip: String,
 }
 
@@ -24,6 +25,7 @@ impl<'a> Cache<'a> {
 
         if contents.is_empty() {
             CacheContent {
+                hash: 0,
                 last_ip: String::new(),
             }
         } else {

@@ -17,8 +17,6 @@ mod gd_api;
 
 fn main() {
     let app = cli();
-
-    // Get help text for later
     let mut help_buffer = Vec::new();
     app.write_help(&mut help_buffer).unwrap();
 
@@ -35,23 +33,9 @@ fn main() {
                 Some(ip) => ip.to_owned(),
                 _ => ip::current_ip()
             };
-            // HTTP client
-            println!("Current IP address is {}", ip_address);
 
-            // Check cache
-            let mut cache_content = cache.read();
-            println!("Current cached IP address is {}", cache_content.last_ip);
-            if ip_address == cache_content.last_ip {
-                println!("IP address is the same. Exiting...");
-                return;
-            }
-            cache_content = cache::CacheContent {
-                last_ip: ip_address.to_owned(),
-            };
-            println!("Cached IP address updated to {}", cache_content.last_ip);
-            cache.write(&cache_content);
+            println!("IP address is {}", ip_address);
 
-            // Post to GoDaddy
             let credentials = gd_api::Credentials {
                 api_key: update_matches.value_of("api_key").unwrap().to_owned(),
                 secret: update_matches.value_of("api_key_secret").unwrap().to_owned(),
@@ -63,6 +47,23 @@ fn main() {
                 name: update_matches.value_of("record_name").unwrap().to_owned(),
                 ttl: value_t!(update_matches, "record_ttl", u64).unwrap().to_owned(),
             };
+            let record_hash = record.hash();
+
+            let mut cache_content = cache.read();
+            println!("Cached record is {:?}", cache_content);
+
+            if record_hash == cache_content.hash && ip_address == cache_content.last_ip {
+                println!("Record and IP address are the same. Exiting...");
+                return;
+            }
+
+            cache_content = cache::CacheContent {
+                hash: record_hash,
+                last_ip: ip_address.to_owned(),
+            };
+            println!("Cached record updated to {:?}", cache_content);
+
+            cache.write(&cache_content);
             gd_api::update_record(&credentials, &record);
         },
         ("", None)   => {
@@ -80,24 +81,21 @@ fn cli() -> clap::App<'static, 'static> {
         .author(crate_authors!())
         .about("Update GoDaddy DNS records")
         .subcommand(SubCommand::with_name("update")
-            .about("Updates GoDaddy DNS records with current IP address")
+            .about("Updates GoDaddy DNS record with IP address")
             .aliases(&["u"])
             .args(&[
                 Arg::with_name("ip_address")
-                    .value_name("IP")
                     .help("sets the IP address to update DNS records")
                     .takes_value(true)
-                    .short("ip")
-                    .long("ip_address"),
+                    .short("i")
+                    .long("ip"),
                 Arg::with_name("api_key")
-                    .value_name("KEY")
                     .help("sets the API key for your GoDaddy account")
                     .required(true)
                     .takes_value(true)
                     .short("a")
                     .long("api_key"),
                 Arg::with_name("api_key_secret")
-                    .value_name("SECRET")
                     .help("sets the API key secret for your GoDaddy account")
                     .required(true)
                     .takes_value(true)
@@ -131,6 +129,6 @@ fn cli() -> clap::App<'static, 'static> {
             ])
         )
         .subcommand(SubCommand::with_name("cache:clear")
-            .about("Clears current IP address cache")
+            .about("Clears last IP address cache")
         )
 }

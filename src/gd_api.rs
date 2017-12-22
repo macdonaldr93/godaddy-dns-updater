@@ -1,3 +1,5 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::io::{self};
 use futures::{Future, Stream};
 use hyper::Client;
@@ -18,6 +20,15 @@ pub struct Record {
     pub domain: String,
     pub name: String,
     pub ttl: u64,
+}
+
+impl Record {
+    pub fn hash(&self) -> u64 {
+        let record_hash = [&self.kind, &self.domain, &self.name];
+        let mut hasher = DefaultHasher::new();
+        Hash::hash_slice(&record_hash, &mut hasher);
+        hasher.finish()
+    }
 }
 
 pub fn update_record(creds: &Credentials, record: &Record) {
