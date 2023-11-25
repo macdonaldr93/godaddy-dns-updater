@@ -1,25 +1,18 @@
-use std::io::{self};
-use futures::{Future, Stream};
-use hyper::Client;
-use tokio_core::reactor::Core;
-use serde_json;
+use serde::Deserialize;
 
-pub fn current_ip() -> String {
-    let mut core = Core::new().unwrap();
-    let client = Client::new(&core.handle());
+#[derive(Deserialize)]
+struct HttpBinResponse {
+    origin: String,
+}
 
-    let uri = "http://httpbin.org/ip".parse().unwrap();
-    let work = client.get(uri)
-        .and_then(|res| {
-            res.body().concat2()
-                .and_then(move |body| {
-                    let v: serde_json::Value = serde_json::from_slice(&body).map_err(|e| {
-                        io::Error::new(io::ErrorKind::Other, e)
-                    })?;
+pub async fn current_ip() -> String {
+    let uri = "http://httpbin.org/ip";
+    let res = reqwest::get(uri)
+        .await
+        .expect("Failed to fetch IP")
+        .json::<HttpBinResponse>()
+        .await
+        .expect("Failed to parse IP");
 
-                    Ok(v["origin"].as_str().unwrap().to_owned())
-                })
-        });
-
-    core.run(work).unwrap()
+    return res.origin;
 }

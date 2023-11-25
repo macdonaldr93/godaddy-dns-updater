@@ -1,7 +1,7 @@
-use std::io::{Read, Write};
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{Read, Write};
 use std::path::Path;
-use serde_json;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CacheContent {
@@ -21,7 +21,8 @@ impl<'a> Cache<'a> {
 
         let mut f = fs::File::open(&self.path).expect("Unable to open file");
         let mut contents = String::new();
-        f.read_to_string(&mut contents).expect("Unable to read file");
+        f.read_to_string(&mut contents)
+            .expect("Unable to read file");
 
         if contents.is_empty() {
             CacheContent {
@@ -36,7 +37,8 @@ impl<'a> Cache<'a> {
     pub fn write(&self, cache_content: &CacheContent) {
         let content = serde_json::to_string(&cache_content).unwrap();
         let mut f = &self.create();
-        f.write_all(content.as_bytes()).expect("Unable to write data");
+        f.write_all(content.as_bytes())
+            .expect("Unable to write data");
     }
 
     pub fn clear(&self) {
