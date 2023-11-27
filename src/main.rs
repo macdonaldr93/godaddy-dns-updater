@@ -10,9 +10,9 @@ mod gd_api;
 mod ip;
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(arg_required_else_help(true), author, version, about, long_about = None)]
 struct Cli {
-    /// Print out additional debugging logs
+    /// Print additional details
     #[arg(short = 'v', long = "verbose")]
     verbose: bool,
 
@@ -94,9 +94,7 @@ async fn main() {
             }
 
             if record_hash == cache_content.hash && ip == cache_content.last_ip {
-                println!("DNS Record and IP are the same");
-                println!("✅ Done");
-                return;
+                println!("✅ DNS record and ip haven't changed");
             }
 
             cache_content = cache::CacheContent {
@@ -109,7 +107,14 @@ async fn main() {
             }
 
             cache.write(&cache_content);
-            record.update(&credentials).await;
+
+            let success = record.update(&credentials).await;
+
+            if success {
+                println!("✅ DNS record updated");
+            } else {
+                println!("GoDaddy had a problem updating the record");
+            }
         }
         Some(Commands::Reset { .. }) => {
             cache.clear();

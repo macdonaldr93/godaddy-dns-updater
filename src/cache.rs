@@ -43,6 +43,7 @@ impl<'a> Cache<'a> {
 
     pub fn clear(&self) {
         let compare = &true;
+
         if &self.path.exists() == compare {
             fs::remove_file(&self.path).unwrap();
         }
